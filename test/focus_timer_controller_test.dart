@@ -1,4 +1,5 @@
 import 'package:focusflow/features/focus/application/focus_timer_controller.dart';
+import 'package:focusflow/features/focus/application/focus_timer_provider.dart';
 import 'package:focusflow/features/focus/domain/focus_mode.dart';
 import 'package:test/test.dart';
 
@@ -88,5 +89,21 @@ void main() {
     expect(record.actualMinutes, 25);
     expect(record.completed, isTrue);
     expect(record.mode, FocusMode.pomodoro);
+  });
+
+  test('notifier sync publishes a new snapshot for UI refreshes', () {
+    final notifier = FocusTimerNotifier();
+
+    notifier.controller.start(
+      plannedMinutes: 25,
+      breakMinutes: 5,
+      mode: FocusMode.pomodoro,
+    );
+    notifier.replaceState();
+    final before = notifier.state;
+
+    notifier.sync();
+
+    expect(identical(notifier.state, before), isFalse);
   });
 }

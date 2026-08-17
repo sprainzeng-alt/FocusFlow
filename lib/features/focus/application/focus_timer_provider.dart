@@ -13,11 +13,11 @@ class FocusTimerNotifier extends StateNotifier<FocusTimerSnapshot> {
 
   void sync() {
     _controller.refresh();
-    state = _controller.snapshot;
+    state = _controller.snapshot.copyWith();
   }
 
   void replaceState() {
-    state = _controller.snapshot;
+    state = _controller.snapshot.copyWith();
   }
 }
 
