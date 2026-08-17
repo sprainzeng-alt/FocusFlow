@@ -1,10 +1,22 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../features/focus/domain/focus_record.dart';
 import '../../features/tasks/domain/task.dart';
 
 class LocalStore extends StateNotifier<LocalStoreState> {
-  LocalStore() : super(LocalStoreState.seeded());
+  LocalStore({SharedPreferencesAsync? preferences})
+      : _preferences = preferences ?? SharedPreferencesAsync(),
+        super(LocalStoreState.seeded()) {
+    _load();
+  }
+
+  static const _tasksKey = 'focusflow.tasks.v1';
+  static const _focusRecordsKey = 'focusflow.focus_records.v1';
+
+  final SharedPreferencesAsync _preferences;
 
   void upsertTask(FocusTask task) {
     final exists = state.tasks.any((item) => item.id == task.id);
@@ -14,13 +26,13 @@ class LocalStore extends StateNotifier<LocalStoreState> {
               if (item.id == task.id) task else item,
           ]
         : [...state.tasks, task];
-    state = state.copyWith(tasks: _sortTasks(tasks));
+    _setState(state.copyWith(tasks: _sortTasks(tasks)));
   }
 
   void deleteTask(String taskId) {
-    state = state.copyWith(
+    _setState(state.copyWith(
       tasks: state.tasks.where((task) => task.id != taskId).toList(),
-    );
+    ));
   }
 
   void toggleTask(String taskId) {
@@ -31,7 +43,7 @@ class LocalStore extends StateNotifier<LocalStoreState> {
         else
           task,
     ];
-    state = state.copyWith(tasks: _sortTasks(tasks));
+    _setState(state.copyWith(tasks: _sortTasks(tasks)));
   }
 
   void addFocusRecord(FocusRecord record) {
@@ -45,9 +57,60 @@ class LocalStore extends StateNotifier<LocalStoreState> {
         else
           task,
     ];
-    state = state.copyWith(
+    _setState(state.copyWith(
       tasks: _sortTasks(tasks),
       focusRecords: [...state.focusRecords, record],
+    ));
+  }
+
+  Future<void> _load() async {
+    final tasksJson = await _preferences.getString(_tasksKey);
+    final focusRecordsJson = await _preferences.getString(_focusRecordsKey);
+    if (tasksJson == null && focusRecordsJson == null) {
+      await _persist(state);
+      return;
+    }
+
+    try {
+      final tasks = tasksJson == null
+          ? state.tasks
+          : (jsonDecode(tasksJson) as List<dynamic>)
+              .cast<Map<String, dynamic>>()
+              .map(FocusTask.fromJson)
+              .toList();
+      final focusRecords = focusRecordsJson == null
+          ? state.focusRecords
+          : (jsonDecode(focusRecordsJson) as List<dynamic>)
+              .cast<Map<String, dynamic>>()
+              .map(FocusRecord.fromJson)
+              .toList();
+      state = state.copyWith(
+        tasks: _sortTasks(tasks),
+        focusRecords: focusRecords,
+        isLoaded: true,
+      );
+    } on FormatException {
+      await _persist(state.copyWith(isLoaded: true));
+    } on TypeError {
+      await _persist(state.copyWith(isLoaded: true));
+    }
+  }
+
+  void _setState(LocalStoreState nextState) {
+    state = nextState.copyWith(isLoaded: true);
+    _persist(state);
+  }
+
+  Future<void> _persist(LocalStoreState value) async {
+    await _preferences.setString(
+      _tasksKey,
+      jsonEncode(value.tasks.map((task) => task.toJson()).toList()),
+    );
+    await _preferences.setString(
+      _focusRecordsKey,
+      jsonEncode(
+        value.focusRecords.map((record) => record.toJson()).toList(),
+      ),
     );
   }
 
@@ -82,6 +145,7 @@ class LocalStoreState {
   const LocalStoreState({
     required this.tasks,
     required this.focusRecords,
+    required this.isLoaded,
   });
 
   factory LocalStoreState.seeded() {
@@ -111,19 +175,23 @@ class LocalStoreState {
         ),
       ],
       focusRecords: const [],
+      isLoaded: false,
     );
   }
 
   final List<FocusTask> tasks;
   final List<FocusRecord> focusRecords;
+  final bool isLoaded;
 
   LocalStoreState copyWith({
     List<FocusTask>? tasks,
     List<FocusRecord>? focusRecords,
+    bool? isLoaded,
   }) {
     return LocalStoreState(
       tasks: tasks ?? this.tasks,
       focusRecords: focusRecords ?? this.focusRecords,
+      isLoaded: isLoaded ?? this.isLoaded,
     );
   }
 }

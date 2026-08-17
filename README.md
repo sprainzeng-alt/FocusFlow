@@ -11,6 +11,7 @@ FocusFlow is a local-first Flutter MVP for a student self-discipline app.
 - Early finish confirmation that records incomplete but real focus time.
 - Statistics page based on `FocusRecord` data.
 - Focus Search router for Google, Bing, Baidu, Bilibili, Zhihu, and Wikipedia.
+- Local persistence for tasks and focus records with shared preferences.
 
 ## Run
 
@@ -30,4 +31,4 @@ flutter test
 
 ## V0.1 Notes
 
-Data is currently stored in an in-memory local store so the app flow can be built and reviewed quickly. Replace `lib/core/data/local_store.dart` with Drift or Isar when persistent storage is needed.
+Data is persisted locally with `shared_preferences` so tasks and focus records survive app restarts. Replace `lib/core/data/local_store.dart` with Drift or Isar later if querying, migrations, or larger datasets become important.

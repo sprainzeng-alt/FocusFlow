@@ -33,6 +33,20 @@ class FocusTask {
   final bool isCompleted;
   final DateTime createdAt;
 
+  factory FocusTask.fromJson(Map<String, dynamic> json) {
+    return FocusTask(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      description: json['description'] as String?,
+      priority: TaskPriority.values.byName(json['priority'] as String),
+      deadline: _dateTimeFromJson(json['deadline']),
+      estimatedMinutes: json['estimatedMinutes'] as int,
+      completedFocusMinutes: json['completedFocusMinutes'] as int,
+      isCompleted: json['isCompleted'] as bool,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+    );
+  }
+
   double get progress {
     if (estimatedMinutes <= 0) {
       return 0;
@@ -64,4 +78,25 @@ class FocusTask {
       createdAt: createdAt ?? this.createdAt,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'priority': priority.name,
+      'deadline': deadline?.toIso8601String(),
+      'estimatedMinutes': estimatedMinutes,
+      'completedFocusMinutes': completedFocusMinutes,
+      'isCompleted': isCompleted,
+      'createdAt': createdAt.toIso8601String(),
+    };
+  }
+}
+
+DateTime? _dateTimeFromJson(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  return DateTime.parse(value as String);
 }

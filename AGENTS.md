@@ -18,7 +18,7 @@ The core experience should help users:
 - Dart
 - Riverpod
 - go_router
-- Local in-memory repository for V0.1, replaceable with Drift or Isar later
+- Local persistence with shared_preferences for V0.1, replaceable with Drift or Isar later
 - fl_chart
 - url_launcher
 
