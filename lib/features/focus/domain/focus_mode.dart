@@ -23,11 +23,15 @@ class FocusModePreset {
   final int focusMinutes;
   final int breakMinutes;
 
-  String get label => '${mode.label} $focusMinutes + $breakMinutes';
+  String get label => mode == FocusMode.custom
+      ? mode.label
+      : '${mode.label} $focusMinutes + $breakMinutes';
 }
 
 const focusModePresets = [
   FocusModePreset(mode: FocusMode.quick, focusMinutes: 10, breakMinutes: 2),
   FocusModePreset(mode: FocusMode.pomodoro, focusMinutes: 25, breakMinutes: 5),
-  FocusModePreset(mode: FocusMode.deepFocus, focusMinutes: 50, breakMinutes: 10),
+  FocusModePreset(
+      mode: FocusMode.deepFocus, focusMinutes: 50, breakMinutes: 10),
+  FocusModePreset(mode: FocusMode.custom, focusMinutes: 30, breakMinutes: 5),
 ];

@@ -7,11 +7,33 @@ import '../../../core/utils/date_utils.dart';
 import '../../../shared/widgets/app_shell.dart';
 import '../../tasks/domain/task.dart';
 
-class HomePage extends ConsumerWidget {
+class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends ConsumerState<HomePage> {
+  final Set<String> _pendingCompletedTaskIds = {};
+
+  Future<void> _toggleTask(FocusTask task) async {
+    if (task.isCompleted) {
+      ref.read(localStoreProvider.notifier).toggleTask(task.id);
+      return;
+    }
+
+    setState(() => _pendingCompletedTaskIds.add(task.id));
+    await Future<void>.delayed(const Duration(milliseconds: 450));
+    if (!mounted) {
+      return;
+    }
+    ref.read(localStoreProvider.notifier).toggleTask(task.id);
+    setState(() => _pendingCompletedTaskIds.remove(task.id));
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(localStoreProvider);
     final todayRecords = state.focusRecords
         .where((record) => isSameDay(record.endTime, DateTime.now()))
@@ -34,7 +56,9 @@ class HomePage extends ConsumerWidget {
           const SizedBox(height: 20),
           Row(
             children: [
-              Expanded(child: _Metric(label: '今日专注', value: formatMinutes(todayMinutes))),
+              Expanded(
+                  child: _Metric(
+                      label: '今日专注', value: formatMinutes(todayMinutes))),
               const SizedBox(width: 12),
               Expanded(
                 child: _Metric(
@@ -75,11 +99,14 @@ class HomePage extends ConsumerWidget {
           Text('今日任务', style: Theme.of(context).textTheme.titleLarge),
           for (final task in state.tasks.take(5))
             CheckboxListTile(
-              value: task.isCompleted,
-              onChanged: (_) =>
-                  ref.read(localStoreProvider.notifier).toggleTask(task.id),
+              value: task.isCompleted ||
+                  _pendingCompletedTaskIds.contains(task.id),
+              onChanged: _pendingCompletedTaskIds.contains(task.id)
+                  ? null
+                  : (_) => _toggleTask(task),
               title: Text(task.title),
-              subtitle: Text('${task.priority.label} · ${formatMinutes(task.estimatedMinutes)}'),
+              subtitle: Text(
+                  '${task.priority.label} · ${formatMinutes(task.estimatedMinutes)}'),
             ),
           OutlinedButton.icon(
             onPressed: () => context.go('/tasks'),

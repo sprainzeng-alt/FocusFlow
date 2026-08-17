@@ -24,10 +24,14 @@ class FocusPage extends ConsumerStatefulWidget {
 class _FocusPageState extends ConsumerState<FocusPage> {
   Timer? _ticker;
   FocusModePreset _selectedPreset = focusModePresets[1];
+  String? _selectedTaskId;
+  int _customFocusMinutes = 30;
+  int _customBreakMinutes = 5;
 
   @override
   void initState() {
     super.initState();
+    _selectedTaskId = widget.taskId;
     if (widget.useQuickStart) {
       _selectedPreset = focusModePresets[0];
     }
@@ -41,6 +45,14 @@ class _FocusPageState extends ConsumerState<FocusPage> {
   }
 
   @override
+  void didUpdateWidget(covariant FocusPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.taskId != widget.taskId) {
+      _selectedTaskId = widget.taskId;
+    }
+  }
+
+  @override
   void dispose() {
     _ticker?.cancel();
     super.dispose();
@@ -50,9 +62,11 @@ class _FocusPageState extends ConsumerState<FocusPage> {
   Widget build(BuildContext context) {
     final timer = ref.watch(focusTimerProvider);
     final tasks = ref.watch(localStoreProvider).tasks;
-    final task = _taskById(tasks, widget.taskId);
+    final availableTasks = tasks.where((task) => !task.isCompleted).toList();
+    final task = _taskById(tasks, _selectedTaskId);
     final title = task?.title ?? '自由专注';
     final remaining = timer.remainingAt(DateTime.now());
+    final canChangeSetup = timer.status == FocusTimerStatus.idle;
 
     return AppShell(
       currentIndex: 2,
@@ -73,6 +87,25 @@ class _FocusPageState extends ConsumerState<FocusPage> {
             ),
             const Spacer(),
             if (timer.status == FocusTimerStatus.idle) ...[
+              DropdownButtonFormField<String?>(
+                initialValue: _selectedTaskId,
+                decoration: const InputDecoration(labelText: '关联任务'),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('自由专注'),
+                  ),
+                  for (final task in availableTasks)
+                    DropdownMenuItem<String?>(
+                      value: task.id,
+                      child: Text(task.title),
+                    ),
+                ],
+                onChanged: canChangeSetup
+                    ? (value) => setState(() => _selectedTaskId = value)
+                    : null,
+              ),
+              const SizedBox(height: 16),
               SegmentedButton<FocusModePreset>(
                 segments: [
                   for (final preset in focusModePresets)
@@ -82,9 +115,29 @@ class _FocusPageState extends ConsumerState<FocusPage> {
                 onSelectionChanged: (value) =>
                     setState(() => _selectedPreset = value.first),
               ),
+              if (_selectedPreset.mode == FocusMode.custom) ...[
+                const SizedBox(height: 16),
+                _MinuteStepper(
+                  label: '专注时长',
+                  value: _customFocusMinutes,
+                  min: 5,
+                  max: 180,
+                  onChanged: (value) =>
+                      setState(() => _customFocusMinutes = value),
+                ),
+                const SizedBox(height: 8),
+                _MinuteStepper(
+                  label: '休息时长',
+                  value: _customBreakMinutes,
+                  min: 0,
+                  max: 60,
+                  onChanged: (value) =>
+                      setState(() => _customBreakMinutes = value),
+                ),
+              ],
               const SizedBox(height: 16),
               FilledButton.icon(
-                onPressed: () => _start(widget.taskId),
+                onPressed: () => _start(_selectedTaskId),
                 icon: const Icon(Icons.play_arrow),
                 label: const Text('开始专注'),
               ),
@@ -123,9 +176,15 @@ class _FocusPageState extends ConsumerState<FocusPage> {
 
   void _start(String? taskId) {
     final notifier = ref.read(focusTimerProvider.notifier);
+    final focusMinutes = _selectedPreset.mode == FocusMode.custom
+        ? _customFocusMinutes
+        : _selectedPreset.focusMinutes;
+    final breakMinutes = _selectedPreset.mode == FocusMode.custom
+        ? _customBreakMinutes
+        : _selectedPreset.breakMinutes;
     notifier.controller.start(
-      plannedMinutes: _selectedPreset.focusMinutes,
-      breakMinutes: _selectedPreset.breakMinutes,
+      plannedMinutes: focusMinutes,
+      breakMinutes: breakMinutes,
       mode: _selectedPreset.mode,
       taskId: taskId,
     );
@@ -155,7 +214,8 @@ class _FocusPageState extends ConsumerState<FocusPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('完成一次专注'),
-        content: Text('已记录 ${snapshot.plannedMinutes} 分钟。现在休息 ${snapshot.breakMinutes} 分钟。'),
+        content: Text(
+            '已记录 ${snapshot.plannedMinutes} 分钟。现在休息 ${snapshot.breakMinutes} 分钟。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -209,6 +269,45 @@ class _FocusPageState extends ConsumerState<FocusPage> {
     final seconds = totalSeconds % 60;
     return '${minutes.toString().padLeft(2, '0')}:'
         '${seconds.toString().padLeft(2, '0')}';
+  }
+}
+
+class _MinuteStepper extends StatelessWidget {
+  const _MinuteStepper({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+  });
+
+  final String label;
+  final int value;
+  final int min;
+  final int max;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: Text(label)),
+        IconButton(
+          tooltip: '减少',
+          onPressed: value <= min ? null : () => onChanged(value - 5),
+          icon: const Icon(Icons.remove_circle_outline),
+        ),
+        SizedBox(
+          width: 72,
+          child: Center(child: Text('$value min')),
+        ),
+        IconButton(
+          tooltip: '增加',
+          onPressed: value >= max ? null : () => onChanged(value + 5),
+          icon: const Icon(Icons.add_circle_outline),
+        ),
+      ],
+    );
   }
 }
 

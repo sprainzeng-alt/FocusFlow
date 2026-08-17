@@ -8,11 +8,33 @@ import '../../../core/utils/id_generator.dart';
 import '../../../shared/widgets/app_shell.dart';
 import '../domain/task.dart';
 
-class TasksPage extends ConsumerWidget {
+class TasksPage extends ConsumerStatefulWidget {
   const TasksPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TasksPage> createState() => _TasksPageState();
+}
+
+class _TasksPageState extends ConsumerState<TasksPage> {
+  final Set<String> _pendingCompletedTaskIds = {};
+
+  Future<void> _toggleTask(FocusTask task) async {
+    if (task.isCompleted) {
+      ref.read(localStoreProvider.notifier).toggleTask(task.id);
+      return;
+    }
+
+    setState(() => _pendingCompletedTaskIds.add(task.id));
+    await Future<void>.delayed(const Duration(milliseconds: 450));
+    if (!mounted) {
+      return;
+    }
+    ref.read(localStoreProvider.notifier).toggleTask(task.id);
+    setState(() => _pendingCompletedTaskIds.remove(task.id));
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final tasks = ref.watch(localStoreProvider).tasks;
     return AppShell(
       currentIndex: 1,
@@ -29,12 +51,12 @@ class TasksPage extends ConsumerWidget {
           for (final task in tasks)
             _TaskCard(
               task: task,
+              isPendingCompleted: _pendingCompletedTaskIds.contains(task.id),
               onStart: () => context.go('/focus?taskId=${task.id}'),
               onEdit: () => _showTaskSheet(context, ref, task: task),
               onDelete: () =>
                   ref.read(localStoreProvider.notifier).deleteTask(task.id),
-              onToggle: () =>
-                  ref.read(localStoreProvider.notifier).toggleTask(task.id),
+              onToggle: () => _toggleTask(task),
             ),
         ],
       ),
@@ -63,6 +85,7 @@ class TasksPage extends ConsumerWidget {
 class _TaskCard extends StatelessWidget {
   const _TaskCard({
     required this.task,
+    required this.isPendingCompleted,
     required this.onStart,
     required this.onEdit,
     required this.onDelete,
@@ -70,6 +93,7 @@ class _TaskCard extends StatelessWidget {
   });
 
   final FocusTask task;
+  final bool isPendingCompleted;
   final VoidCallback onStart;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -86,7 +110,10 @@ class _TaskCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Checkbox(value: task.isCompleted, onChanged: (_) => onToggle()),
+                Checkbox(
+                  value: task.isCompleted || isPendingCompleted,
+                  onChanged: isPendingCompleted ? null : (_) => onToggle(),
+                ),
                 Expanded(
                   child: Text(
                     task.title,
