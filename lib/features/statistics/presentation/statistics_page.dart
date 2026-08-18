@@ -21,7 +21,7 @@ class StatisticsPage extends ConsumerWidget {
     final todayPomodoros =
         todayRecords.where((record) => record.completed).length;
     final completedTasks = state.tasks.where((task) => task.isCompleted).length;
-    const dailyGoalMinutes = 120;
+    final dailyGoalMinutes = state.settings.dailyGoalMinutes;
     final goalProgress =
         (todayMinutes / dailyGoalMinutes).clamp(0, 1).toDouble();
 

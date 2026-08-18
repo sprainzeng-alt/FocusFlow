@@ -44,13 +44,29 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
     final completedTasks = state.tasks.where((task) => task.isCompleted).length;
     final nextTask = _firstIncompleteTask(state.tasks);
+    final todayTasks =
+        state.tasks.where(_isTodayOrOverdueTask).take(5).toList();
 
     return AppShell(
       currentIndex: 0,
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          Text('FocusFlow', style: Theme.of(context).textTheme.headlineLarge),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'FocusFlow',
+                  style: Theme.of(context).textTheme.headlineLarge,
+                ),
+              ),
+              IconButton(
+                tooltip: '设置',
+                onPressed: () => context.go('/settings'),
+                icon: const Icon(Icons.settings_outlined),
+              ),
+            ],
+          ),
           const SizedBox(height: 6),
           const Text('今天先开始一小步。'),
           const SizedBox(height: 20),
@@ -97,17 +113,25 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           const SizedBox(height: 20),
           Text('今日任务', style: Theme.of(context).textTheme.titleLarge),
-          for (final task in state.tasks.take(5))
-            CheckboxListTile(
-              value: task.isCompleted ||
-                  _pendingCompletedTaskIds.contains(task.id),
-              onChanged: _pendingCompletedTaskIds.contains(task.id)
-                  ? null
-                  : (_) => _toggleTask(task),
-              title: Text(task.title),
-              subtitle: Text(
-                  '${task.priority.label} · ${formatMinutes(task.estimatedMinutes)}'),
-            ),
+          if (todayTasks.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text('今天没有到期任务，可以从任务页添加一个。'),
+            )
+          else
+            for (final task in todayTasks)
+              CheckboxListTile(
+                value: task.isCompleted ||
+                    _pendingCompletedTaskIds.contains(task.id),
+                onChanged: _pendingCompletedTaskIds.contains(task.id)
+                    ? null
+                    : (_) => _toggleTask(task),
+                title: Text(task.title),
+                subtitle: Text(
+                  '${task.priority.label} · ${formatMinutes(task.estimatedMinutes)}'
+                  ' · ${formatDeadline(task.deadline)}',
+                ),
+              ),
           OutlinedButton.icon(
             onPressed: () => context.go('/tasks'),
             icon: const Icon(Icons.add),
@@ -117,6 +141,14 @@ class _HomePageState extends ConsumerState<HomePage> {
       ),
     );
   }
+}
+
+bool _isTodayOrOverdueTask(FocusTask task) {
+  final deadline = task.deadline;
+  if (task.isCompleted || deadline == null) {
+    return false;
+  }
+  return !startOfDay(deadline).isAfter(startOfDay(DateTime.now()));
 }
 
 FocusTask? _firstIncompleteTask(Iterable<FocusTask> tasks) {

@@ -15,6 +15,7 @@ class LocalStore extends StateNotifier<LocalStoreState> {
 
   static const _tasksKey = 'focusflow.tasks.v1';
   static const _focusRecordsKey = 'focusflow.focus_records.v1';
+  static const _settingsKey = 'focusflow.settings.v1';
 
   final SharedPreferencesAsync _preferences;
 
@@ -52,7 +53,9 @@ class LocalStore extends StateNotifier<LocalStoreState> {
         if (record.taskId == task.id)
           task.copyWith(
             completedFocusMinutes: task.completedFocusMinutes +
-                (record.completed ? record.plannedMinutes : record.actualMinutes),
+                (record.completed
+                    ? record.plannedMinutes
+                    : record.actualMinutes),
           )
         else
           task,
@@ -63,10 +66,67 @@ class LocalStore extends StateNotifier<LocalStoreState> {
     ));
   }
 
+  void updateSettings(AppSettings settings) {
+    _setState(state.copyWith(settings: settings));
+  }
+
+  void recordSearchQuery(String query) {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    final recentSearches = [
+      trimmed,
+      for (final item in state.settings.recentSearches)
+        if (item != trimmed) item,
+    ].take(6).toList();
+    updateSettings(state.settings.copyWith(recentSearches: recentSearches));
+  }
+
+  void clearRecentSearches() {
+    updateSettings(state.settings.copyWith(recentSearches: const []));
+  }
+
+  void upsertStudyShortcut(StudyShortcut shortcut) {
+    final exists =
+        state.settings.studyShortcuts.any((item) => item.id == shortcut.id);
+    final shortcuts = exists
+        ? [
+            for (final item in state.settings.studyShortcuts)
+              if (item.id == shortcut.id) shortcut else item,
+          ]
+        : [shortcut, ...state.settings.studyShortcuts];
+    updateSettings(state.settings.copyWith(studyShortcuts: shortcuts));
+  }
+
+  void deleteStudyShortcut(String shortcutId) {
+    updateSettings(
+      state.settings.copyWith(
+        studyShortcuts: state.settings.studyShortcuts
+            .where((shortcut) => shortcut.id != shortcutId)
+            .toList(),
+      ),
+    );
+  }
+
+  void resetLocalData() {
+    _setState(LocalStoreState.empty(settings: state.settings));
+  }
+
+  String exportJson() {
+    return const JsonEncoder.withIndent('  ').convert({
+      'settings': state.settings.toJson(),
+      'tasks': state.tasks.map((task) => task.toJson()).toList(),
+      'focusRecords':
+          state.focusRecords.map((record) => record.toJson()).toList(),
+    });
+  }
+
   Future<void> _load() async {
     final tasksJson = await _preferences.getString(_tasksKey);
     final focusRecordsJson = await _preferences.getString(_focusRecordsKey);
-    if (tasksJson == null && focusRecordsJson == null) {
+    final settingsJson = await _preferences.getString(_settingsKey);
+    if (tasksJson == null && focusRecordsJson == null && settingsJson == null) {
       await _persist(state);
       return;
     }
@@ -84,9 +144,15 @@ class LocalStore extends StateNotifier<LocalStoreState> {
               .cast<Map<String, dynamic>>()
               .map(FocusRecord.fromJson)
               .toList();
+      final settings = settingsJson == null
+          ? state.settings
+          : AppSettings.fromJson(
+              (jsonDecode(settingsJson) as Map<String, dynamic>),
+            );
       state = state.copyWith(
         tasks: _sortTasks(tasks),
         focusRecords: focusRecords,
+        settings: settings,
         isLoaded: true,
       );
     } on FormatException {
@@ -111,6 +177,10 @@ class LocalStore extends StateNotifier<LocalStoreState> {
       jsonEncode(
         value.focusRecords.map((record) => record.toJson()).toList(),
       ),
+    );
+    await _preferences.setString(
+      _settingsKey,
+      jsonEncode(value.settings.toJson()),
     );
   }
 
@@ -141,12 +211,108 @@ class LocalStore extends StateNotifier<LocalStoreState> {
   }
 }
 
+class AppSettings {
+  const AppSettings({
+    required this.dailyGoalMinutes,
+    required this.recentSearches,
+    required this.studyShortcuts,
+  });
+
+  factory AppSettings.defaults() {
+    return const AppSettings(
+      dailyGoalMinutes: 120,
+      recentSearches: [],
+      studyShortcuts: [],
+    );
+  }
+
+  final int dailyGoalMinutes;
+  final List<String> recentSearches;
+  final List<StudyShortcut> studyShortcuts;
+
+  factory AppSettings.fromJson(Map<String, dynamic> json) {
+    return AppSettings(
+      dailyGoalMinutes: (json['dailyGoalMinutes'] as int?) ?? 120,
+      recentSearches: ((json['recentSearches'] as List<dynamic>?) ?? const [])
+          .whereType<String>()
+          .toList(),
+      studyShortcuts: ((json['studyShortcuts'] as List<dynamic>?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(StudyShortcut.fromJson)
+          .toList(),
+    );
+  }
+
+  AppSettings copyWith({
+    int? dailyGoalMinutes,
+    List<String>? recentSearches,
+    List<StudyShortcut>? studyShortcuts,
+  }) {
+    return AppSettings(
+      dailyGoalMinutes: dailyGoalMinutes ?? this.dailyGoalMinutes,
+      recentSearches: recentSearches ?? this.recentSearches,
+      studyShortcuts: studyShortcuts ?? this.studyShortcuts,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'dailyGoalMinutes': dailyGoalMinutes,
+      'recentSearches': recentSearches,
+      'studyShortcuts':
+          studyShortcuts.map((shortcut) => shortcut.toJson()).toList(),
+    };
+  }
+}
+
+class StudyShortcut {
+  const StudyShortcut({
+    required this.id,
+    required this.label,
+    required this.url,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String label;
+  final String url;
+  final DateTime createdAt;
+
+  factory StudyShortcut.fromJson(Map<String, dynamic> json) {
+    return StudyShortcut(
+      id: json['id'] as String,
+      label: json['label'] as String,
+      url: json['url'] as String,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'label': label,
+      'url': url,
+      'createdAt': createdAt.toIso8601String(),
+    };
+  }
+}
+
 class LocalStoreState {
   const LocalStoreState({
     required this.tasks,
     required this.focusRecords,
+    required this.settings,
     required this.isLoaded,
   });
+
+  factory LocalStoreState.empty({AppSettings? settings}) {
+    return LocalStoreState(
+      tasks: const [],
+      focusRecords: const [],
+      settings: settings ?? AppSettings.defaults(),
+      isLoaded: true,
+    );
+  }
 
   factory LocalStoreState.seeded() {
     final now = DateTime.now();
@@ -175,22 +341,26 @@ class LocalStoreState {
         ),
       ],
       focusRecords: const [],
+      settings: AppSettings.defaults(),
       isLoaded: false,
     );
   }
 
   final List<FocusTask> tasks;
   final List<FocusRecord> focusRecords;
+  final AppSettings settings;
   final bool isLoaded;
 
   LocalStoreState copyWith({
     List<FocusTask>? tasks,
     List<FocusRecord>? focusRecords,
+    AppSettings? settings,
     bool? isLoaded,
   }) {
     return LocalStoreState(
       tasks: tasks ?? this.tasks,
       focusRecords: focusRecords ?? this.focusRecords,
+      settings: settings ?? this.settings,
       isLoaded: isLoaded ?? this.isLoaded,
     );
   }
