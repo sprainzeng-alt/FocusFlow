@@ -106,7 +106,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                   '${nextTask.estimatedMinutes} min',
                 ),
                 trailing: FilledButton(
-                  onPressed: () => context.go('/focus?taskId=${nextTask.id}'),
+                  onPressed: () => context
+                      .go('/focus?taskId=${nextTask.id}&taskLaunch=true'),
                   child: const Text('开始专注'),
                 ),
               ),

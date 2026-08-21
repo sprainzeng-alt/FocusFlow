@@ -5,9 +5,11 @@ typedef NowProvider = DateTime Function();
 
 enum FocusTimerStatus {
   idle,
-  running,
-  paused,
-  completed,
+  focusRunning,
+  focusPaused,
+  focusCompleted,
+  breakRunning,
+  breakPaused,
 }
 
 class FocusTimerSnapshot {
@@ -46,11 +48,28 @@ class FocusTimerSnapshot {
   final FocusMode mode;
   final Duration pausedElapsed;
 
+  bool get isBreak =>
+      status == FocusTimerStatus.breakRunning ||
+      status == FocusTimerStatus.breakPaused;
+
+  bool get isFocus =>
+      status == FocusTimerStatus.focusRunning ||
+      status == FocusTimerStatus.focusPaused ||
+      status == FocusTimerStatus.focusCompleted;
+
+  bool get isPaused =>
+      status == FocusTimerStatus.focusPaused ||
+      status == FocusTimerStatus.breakPaused;
+
+  bool get isRunning =>
+      status == FocusTimerStatus.focusRunning ||
+      status == FocusTimerStatus.breakRunning;
+
   Duration remainingAt(DateTime now) {
     if (status == FocusTimerStatus.idle) {
       return Duration.zero;
     }
-    if (status == FocusTimerStatus.paused && pauseStartedAt != null) {
+    if (isPaused && pauseStartedAt != null) {
       final remaining = plannedEndTime.difference(pauseStartedAt!);
       return remaining.isNegative ? Duration.zero : remaining;
     }
@@ -105,7 +124,7 @@ class FocusTimerController {
   }) {
     final now = _now();
     snapshot = FocusTimerSnapshot(
-      status: FocusTimerStatus.running,
+      status: FocusTimerStatus.focusRunning,
       taskId: taskId,
       startTime: now,
       plannedEndTime: now.add(Duration(minutes: plannedMinutes)),
@@ -116,25 +135,50 @@ class FocusTimerController {
     );
   }
 
+  void startBreak({
+    required int breakMinutes,
+    required FocusMode mode,
+    String? taskId,
+  }) {
+    if (breakMinutes <= 0) {
+      snapshot = FocusTimerSnapshot.idle();
+      return;
+    }
+    final now = _now();
+    snapshot = FocusTimerSnapshot(
+      status: FocusTimerStatus.breakRunning,
+      taskId: taskId,
+      startTime: now,
+      plannedEndTime: now.add(Duration(minutes: breakMinutes)),
+      plannedMinutes: 0,
+      breakMinutes: breakMinutes,
+      mode: mode,
+      pausedElapsed: Duration.zero,
+    );
+  }
+
   void pause() {
-    if (snapshot.status != FocusTimerStatus.running) {
+    if (!snapshot.isRunning) {
       return;
     }
     snapshot = snapshot.copyWith(
-      status: FocusTimerStatus.paused,
+      status: snapshot.isBreak
+          ? FocusTimerStatus.breakPaused
+          : FocusTimerStatus.focusPaused,
       pauseStartedAt: _now(),
     );
   }
 
   void resume() {
-    if (snapshot.status != FocusTimerStatus.paused ||
-        snapshot.pauseStartedAt == null) {
+    if (!snapshot.isPaused || snapshot.pauseStartedAt == null) {
       return;
     }
     final now = _now();
     final pauseDuration = now.difference(snapshot.pauseStartedAt!);
     snapshot = snapshot.copyWith(
-      status: FocusTimerStatus.running,
+      status: snapshot.isBreak
+          ? FocusTimerStatus.breakRunning
+          : FocusTimerStatus.focusRunning,
       plannedEndTime: snapshot.plannedEndTime.add(pauseDuration),
       pausedElapsed: snapshot.pausedElapsed + pauseDuration,
       clearPauseStartedAt: true,
@@ -142,14 +186,22 @@ class FocusTimerController {
   }
 
   bool refresh() {
-    if (snapshot.status != FocusTimerStatus.running) {
+    if (!snapshot.isRunning) {
       return false;
     }
     if (snapshot.remainingAt(_now()) == Duration.zero) {
-      snapshot = snapshot.copyWith(status: FocusTimerStatus.completed);
+      snapshot = snapshot.isBreak
+          ? FocusTimerSnapshot.idle()
+          : snapshot.copyWith(status: FocusTimerStatus.focusCompleted);
       return true;
     }
     return false;
+  }
+
+  void skipBreak() {
+    if (snapshot.isBreak) {
+      snapshot = FocusTimerSnapshot.idle();
+    }
   }
 
   FocusRecord finish({
@@ -157,9 +209,8 @@ class FocusTimerController {
     required bool completed,
   }) {
     final now = _now();
-    final actualMinutes = completed
-        ? snapshot.plannedMinutes
-        : snapshot.actualMinutesAt(now);
+    final actualMinutes =
+        completed ? snapshot.plannedMinutes : snapshot.actualMinutesAt(now);
     final record = FocusRecord(
       id: id,
       taskId: snapshot.taskId,

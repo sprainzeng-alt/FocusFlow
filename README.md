@@ -1,4 +1,4 @@
-# FocusFlow V0.2
+# FocusFlow V0.3
 
 FocusFlow is a local-first Flutter MVP for a student self-discipline app.
 
@@ -15,6 +15,9 @@ FocusFlow is a local-first Flutter MVP for a student self-discipline app.
 - V0.2 settings page with daily goal, JSON export, and local data reset.
 - Task filters, delete confirmation with undo, and custom deadline dates.
 - Focus Search supports recent queries and custom study shortcuts.
+- V0.3 focus lock that blocks navigation, pause, and early finish before the timer ends.
+- Completed focus sessions now enter a rest timer, with skip and next-round actions.
+- Focus timer state is explicit for focus running, focus paused, focus completed, break running, and break paused.
 
 ## Run
 
@@ -32,6 +35,8 @@ flutter analyze
 flutter test
 ```
 
-## V0.2 Notes
+## V0.3 Notes
 
 Data is persisted locally with `shared_preferences` so tasks and focus records survive app restarts. Replace `lib/core/data/local_store.dart` with Drift or Isar later if querying, migrations, or larger datasets become important.
+
+The focus lock is an in-app guard for V0.3. Android system-level lock/task mode requires native platform integration and device permission design, so this version first keeps the user inside the app flow without pretending to control the whole phone.

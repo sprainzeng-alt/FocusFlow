@@ -17,7 +17,13 @@ final appRouter = GoRouter(
       builder: (context, state) {
         final taskId = state.uri.queryParameters['taskId'];
         final quick = state.uri.queryParameters['quick'] == 'true';
-        return FocusPage(taskId: taskId, useQuickStart: quick);
+        final taskLaunch = state.uri.queryParameters['taskLaunch'] == 'true' ||
+            (taskId != null && !quick);
+        return FocusPage(
+          taskId: taskId,
+          useQuickStart: quick,
+          useTaskDuration: taskLaunch,
+        );
       },
     ),
     GoRoute(

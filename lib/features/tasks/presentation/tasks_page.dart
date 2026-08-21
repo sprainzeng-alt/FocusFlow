@@ -84,7 +84,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               _TaskCard(
                 task: task,
                 isPendingCompleted: _pendingCompletedTaskIds.contains(task.id),
-                onStart: () => context.go('/focus?taskId=${task.id}'),
+                onStart: () =>
+                    context.go('/focus?taskId=${task.id}&taskLaunch=true'),
                 onEdit: () => _showTaskSheet(context, ref, task: task),
                 onDelete: () => _confirmDeleteTask(context, ref, task),
                 onToggle: () => _toggleTask(task),
